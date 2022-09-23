@@ -5,17 +5,15 @@
 ###################################
 
 #Create HA pair
-#Configure NTP
-#7. HA failsafe mode is enabled to ensure that the last healthy node continues to provide service
-#8. Restrict HA failovers to 3 in 1200 seconds
-#13. Restrict SNMP queries to select servers
-#14. Set SNMP alarms and traps
-#16. Set a timeout and prompt for management sessions
 
 ###############################
 #  All the things we can do.
 ###############################
 
+# Set the hostname
+resource "citrixadc_nshostname" "tf_nshostname" {
+   hostname = "mycitrix_adc"
+}
 
 # Create VLAN, add SNIP, bind SNIP to VLAN
 resource "citrixadc_vlan" "tf_vlan" {
@@ -42,6 +40,25 @@ resource "citrixadc_vlan_nsip_binding" "tf_bind" {
   ipaddress = citrixadc_nsip.tf_snip.ipaddress
   netmask   = citrixadc_nsip.tf_snip.netmask
 }
+
+#7. HA failsafe mode is enabled to ensure that the last healthy node continues to provide service
+# Note that you will want to define the secondary node in provider.tf and run similar commands as settings like failsafe mode need to be implemented on both HA nodes.
+resource "citrixadc_hanode" "primary_node_ha_failover" {
+  hanode_id = 0 //the id of primary_node is always 0
+  failsafe  = "ON"
+}
+
+#8. Restrict HA failovers to 3 in 1200 seconds
+resource "citrixadc_hanode" "primary_node_ha_maxfliptime" {
+  hanode_id   = 0 //the id of primary_node is always 0
+  maxfliptime = 1200
+}
+
+resource "citrixadc_hanode" "primary_node_ha_maxflips" {
+  hanode_id = 0 //the id of primary_node is always 0
+  maxflips  = 3
+}
+
 
 # 10. Make sure you can ping each SNIP with Mac Based Forwarding (MBF) is disabled or that you understand why you cannot
 resource "citrixadc_nsmode" "tf_nsmode_mbf_off" {
@@ -271,7 +288,52 @@ resource "citrixadc_nsparam" "tf_nsparam_cookie" {
   timezone      = "CoordinatedUniversalTime"
 }
 
+resource "citrixadc_ntpserver" "tf_ntpserver" {
+  servername          = "pool.ntp.org"
+  minpoll            = 6
+  maxpoll            = 10
+  preferredntpserver = "YES"
+}
 
+resource "citrixadc_ntpsync" "tf_ntpsync" {
+  state = "ENABLED"
+}
+
+#13. Restrict SNMP queries to select servers
+resource "citrixadc_snmpmanager" "tf_snmpmanager" {
+  ipaddress          = "192.168.2.4"
+  netmask            = "255.255.255.255"
+}
+
+#14. Set SNMP alarms and traps
+resource "citrixadc_snmpalarm" "tf_snmpalarm" {
+  trapname       = "CPU-USAGE"
+  thresholdvalue = 80
+  normalvalue    = 35
+  state          = "ENABLED"
+  severity       = "Informational"
+  logging        = "ENABLED"
+}
+
+resource "citrixadc_snmpalarm" "tf_snmpalarm1" {
+  trapname       = "MEMORY"
+  thresholdvalue = 80
+  normalvalue    = 35
+  state          = "ENABLED"
+  severity       = "Critical"
+  logging        = "ENABLED"
+}
+
+resource "citrixadc_snmpalarm" "tf_snmpalarm2" {
+ trapname       = "HA-STATE-CHANGE"
+ severity       = "Critical"
+}
+
+resource "citrixadc_snmptrap" "tf_snmptrap" {
+  trapclass       = "generic"
+  trapdestination = "192.168.2.2" // SNMPTRAPDSTIP
+  communityname   = "public"
+}
 
 #15. Set a remote syslog server
 
@@ -293,6 +355,15 @@ resource "citrixadc_auditsyslogpolicy" "tf_auditsyslogpolicy" {
     feature        = "SYSTEM"
     globalbindtype = "SYSTEM_GLOBAL"
   }
+}
+
+#16. Set a timeout and prompt for management sessions
+resource "citrixadc_systemparameter" "tf_systemparameter" {
+    timeout = 900
+}
+
+resource "citrixadc_systemparameter" "tf_systemparameter1" {
+  promptstring = "%u@%h-%s"
 }
 
 #17. Centralized authentication for management accounts
