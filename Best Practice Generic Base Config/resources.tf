@@ -263,12 +263,16 @@ resource "citrixadc_dnsnameserver" "dnsnameserver_UDP" {
   dnsvservername = "DNS_UDP"
   state          = "ENABLED"
   type           = "UDP"
+  depends_on = [
+    citrixadc_lbvserver.tf_lbvserver_DNS
 }
 
 resource "citrixadc_dnsnameserver" "dnsnameserver_TCP" {
   dnsvservername = "DNS_TCP"
   state          = "ENABLED"
   type           = "TCP"
+  depends_on = [
+    citrixadc_lbvserver.tf_lbvserver_DNS_TCP
 }
 
 #12. Set TCP and HTTP parameters
